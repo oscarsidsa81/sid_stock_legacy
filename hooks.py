@@ -40,10 +40,13 @@ def _copy_field_values(Model, src, dst, batch=2000):
             sv = r[src]
             if not sv:
                 continue
-            # si ya está igual, skip
-            if r[dst] == sv:
+            write_val = _convert_value_for_field(Model, src, dst, sv)
+            if write_val is None:
                 continue
-            vals_list.append((r.id, sv))
+            # si ya está igual, skip
+            if _field_values_equal(r, dst, write_val):
+                continue
+            vals_list.append((r.id, write_val))
         if vals_list:
             # write uno a uno: más seguro con tipos M2M / M2O / selection
             for rid, sv in vals_list:
@@ -51,6 +54,72 @@ def _copy_field_values(Model, src, dst, batch=2000):
             total += len(vals_list)
         offset += batch
     return total
+
+
+def _field_values_equal(record, field_name, write_val):
+    fld = record._fields[field_name]
+    current = record[field_name]
+    if fld.type == "many2many":
+        target_ids = set(write_val[0][2]) if write_val else set()
+        return set(current.ids) == target_ids
+    if fld.type == "one2many":
+        # one2many no se copia en este módulo
+        return False
+    if fld.type == "many2one":
+        return (current.id or False) == (write_val or False)
+    return current == write_val
+
+
+def _convert_value_for_field(Model, src, dst, source_val):
+    src_fld = Model._fields[src]
+    dst_fld = Model._fields[dst]
+
+    # tipos simples
+    if dst_fld.type not in ("many2one", "many2many", "one2many"):
+        return source_val
+
+    # no copiamos one2many para evitar writes complejos/inesperados
+    if dst_fld.type == "one2many":
+        return None
+
+    # many2one
+    if dst_fld.type == "many2one":
+        if not source_val:
+            return False
+        if src_fld.type != "many2one":
+            return None
+        if src_fld.comodel_name == dst_fld.comodel_name:
+            return source_val.id
+        # fallback: mapear por nombre
+        mapped = _map_by_name(Model.env, source_val, dst_fld.comodel_name)
+        return mapped.id if mapped else None
+
+    # many2many
+    if dst_fld.type == "many2many":
+        if src_fld.type != "many2many":
+            return None
+        if src_fld.comodel_name == dst_fld.comodel_name:
+            return [(6, 0, source_val.ids)]
+        mapped_ids = _map_many2many_by_name(Model.env, source_val, dst_fld.comodel_name)
+        return [(6, 0, mapped_ids)] if mapped_ids else None
+
+    return None
+
+
+def _map_by_name(env, source_record, target_model):
+    name = source_record.display_name or source_record.name
+    if not name:
+        return env[target_model]
+    return env[target_model].search([("name", "=", name)], limit=1)
+
+
+def _map_many2many_by_name(env, source_records, target_model):
+    names = [n for n in source_records.mapped("display_name") if n]
+    if not names:
+        return []
+    targets = env[target_model].search([("name", "in", names)])
+    by_name = {t.name: t.id for t in targets if t.name}
+    return [by_name[n] for n in names if n in by_name]
 
 
 def post_init_copy_stock_legacy_to_base(cr, registry):
