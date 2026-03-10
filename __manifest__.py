@@ -9,6 +9,7 @@
     "depends": [
         "sid_stock_base",
         "sid_product_base",
+        "sid_activity_enhance",
     ],
     "data": [],
     "post_init_hook": "post_init_copy_stock_legacy_to_base",
