@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "SID Stock Legacy",
+    "name": "sid_stock_legacy",
     "summary": "Migración de datos x_* (Studio) hacia sid_* (campos base) en modelos de stock.",
     "version": "15.0.1.0.1",
     "category": "Inventory/Inventory",
-    "author": "SIDSA",
+    "author": "oscarsidsa81",
     "license": "LGPL-3",
     "depends": [
         "sid_stock_base",
